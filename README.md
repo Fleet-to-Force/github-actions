@@ -7,7 +7,7 @@ Composite GitHub Action to install radare2 in CI workflows. Supports Linux, macO
 Reference the action from your workflow:
 
 ```yaml
-- uses: radareorg/radare2/dist/github-actions@master
+- uses: radareorg/github-actions@master
 ```
 
 ## Inputs
@@ -31,14 +31,14 @@ Reference the action from your workflow:
 
 ```yaml
 steps:
-  - uses: radareorg/radare2/dist/github-actions@master
+  - uses: radareorg/github-actions@master
 ```
 
 ### Install a specific version
 
 ```yaml
 steps:
-  - uses: radareorg/radare2/dist/github-actions@master
+  - uses: radareorg/github-actions@master
     with:
       version: '6.1.2'
 ```
@@ -47,7 +47,7 @@ steps:
 
 ```yaml
 steps:
-  - uses: radareorg/radare2/dist/github-actions@master
+  - uses: radareorg/github-actions@master
     with:
       from-git: true
 ```
@@ -56,7 +56,7 @@ steps:
 
 ```yaml
 steps:
-  - uses: radareorg/radare2/dist/github-actions@master
+  - uses: radareorg/github-actions@master
     with:
       version: '6.1.2'
       from-git: true
@@ -66,7 +66,7 @@ steps:
 
 ```yaml
 steps:
-  - uses: radareorg/radare2/dist/github-actions@master
+  - uses: radareorg/github-actions@master
     with:
       from-git: true
       prefix: '/opt/radare2'
@@ -99,7 +99,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
-      - uses: radareorg/radare2/dist/github-actions@master
+      - uses: radareorg/github-actions@master
         id: r2
       - name: Build with Make
         if: matrix.build_system == 'make'
@@ -118,7 +118,7 @@ jobs:
 
 ```yaml
 steps:
-  - uses: radareorg/radare2/dist/github-actions@master
+  - uses: radareorg/github-actions@master
     id: r2
   - run: echo "Installed r2 ${{ steps.r2.outputs.version }} at ${{ steps.r2.outputs.prefix }}"
 ```
