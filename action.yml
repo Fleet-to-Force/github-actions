@@ -93,6 +93,8 @@ runs:
         ninja -C build install
         $resolvedBin = (Resolve-Path "$prefix\bin").Path
         $resolvedBin | Out-File -Append -Encoding utf8 $env:GITHUB_PATH
+        Set-Location $env:RUNNER_TEMP
+        Remove-Item -Path $buildDir -Recurse -Force
 
     # --- INSTALL FROM RELEASE (Linux) ---
     - name: Install from release (Linux)
