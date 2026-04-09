@@ -34,10 +34,12 @@ runs:
       shell: bash
       env:
         GH_TOKEN: ${{ github.token }}
+        R2V_INPUT: ${{ inputs.version }}
+        FROM_GIT: ${{ inputs.from-git }}
       run: |
         set -e
-        R2V="${{ inputs.version }}"
-        if [ -z "$R2V" ] && [ "${{ inputs.from-git }}" != "true" ]; then
+        R2V="$R2V_INPUT"
+        if [ -z "$R2V" ] && [ "$FROM_GIT" != "true" ]; then
           R2V=$(gh api repos/radareorg/radare2/releases/latest --jq .tag_name) || true
           if [ -z "$R2V" ]; then
             echo "::error::Failed to resolve latest radare2 release version"
@@ -51,9 +53,11 @@ runs:
     - name: Build from git (Unix)
       if: inputs.from-git == 'true' && runner.os != 'Windows'
       shell: bash
+      env:
+        R2V: ${{ steps.resolve.outputs.r2v }}
+        R2_PREFIX: ${{ inputs.prefix }}
       run: |
         set -e
-        R2V="${{ steps.resolve.outputs.r2v }}"
         CLONEARGS="--depth=1"
         if [ -n "$R2V" ]; then
           CLONEARGS="$CLONEARGS --branch $R2V"
@@ -61,7 +65,7 @@ runs:
         git clone $CLONEARGS https://github.com/radareorg/radare2.git /tmp/_r2build
         cd /tmp/_r2build
         export CFLAGS="-O2 -Wno-unused-result"
-        ./sys/install.sh "${{ inputs.prefix }}"
+        ./sys/install.sh "$R2_PREFIX"
         cd /
         rm -rf /tmp/_r2build
 
@@ -69,16 +73,18 @@ runs:
     - name: Build from git (Windows)
       if: inputs.from-git == 'true' && runner.os == 'Windows'
       shell: powershell
+      env:
+        R2V: ${{ steps.resolve.outputs.r2v }}
+        R2_PREFIX: ${{ inputs.prefix }}
       run: |
         $ErrorActionPreference = 'Stop'
-        $R2V = "${{ steps.resolve.outputs.r2v }}"
         $cloneArgs = @('clone', '--depth=1')
-        if ($R2V) { $cloneArgs += @('--branch', $R2V) }
+        if ($env:R2V) { $cloneArgs += @('--branch', $env:R2V) }
         $buildDir = Join-Path $env:RUNNER_TEMP '_r2build'
         & git @cloneArgs 'https://github.com/radareorg/radare2.git' $buildDir
         Set-Location $buildDir
         pip install meson ninja
-        $prefix = '${{ inputs.prefix }}'
+        $prefix = $env:R2_PREFIX
         if (-not $prefix -or $prefix -eq '/usr') {
           $prefix = Join-Path $env:RUNNER_TEMP 'radare2'
         }
@@ -92,9 +98,10 @@ runs:
     - name: Install from release (Linux)
       if: inputs.from-git != 'true' && runner.os == 'Linux'
       shell: bash
+      env:
+        R2V: ${{ steps.resolve.outputs.r2v }}
       run: |
         set -e
-        R2V="${{ steps.resolve.outputs.r2v }}"
         ARCH=$(dpkg --print-architecture 2>/dev/null || echo amd64)
         BASE="https://github.com/radareorg/radare2/releases/download/${R2V}"
         cd /tmp
@@ -108,9 +115,10 @@ runs:
     - name: Install from release (macOS)
       if: inputs.from-git != 'true' && runner.os == 'macOS'
       shell: bash
+      env:
+        R2V: ${{ steps.resolve.outputs.r2v }}
       run: |
         set -e
-        R2V="${{ steps.resolve.outputs.r2v }}"
         ARCH=$(uname -m)
         case "$ARCH" in
           arm64|aarch64) PKG_ARCH="arm64" ;;
@@ -126,9 +134,12 @@ runs:
     - name: Install from release (Windows)
       if: inputs.from-git != 'true' && runner.os == 'Windows'
       shell: powershell
+      env:
+        R2V: ${{ steps.resolve.outputs.r2v }}
+        R2_PREFIX: ${{ inputs.prefix }}
       run: |
         $ErrorActionPreference = 'Stop'
-        $R2V = "${{ steps.resolve.outputs.r2v }}"
+        $R2V = $env:R2V
         $arch = $env:PROCESSOR_ARCHITECTURE
         switch ($arch) {
           'ARM64' { $pkgArch = 'w64-arm64' }
@@ -138,7 +149,7 @@ runs:
         $url = "https://github.com/radareorg/radare2/releases/download/$R2V/radare2-$R2V-$pkgArch.zip"
         $dest = Join-Path $env:RUNNER_TEMP 'radare2.zip'
         Invoke-WebRequest -Uri $url -OutFile $dest -UseBasicParsing
-        $prefix = '${{ inputs.prefix }}'
+        $prefix = $env:R2_PREFIX
         if (-not $prefix -or $prefix -eq '/usr') {
           $prefix = Join-Path $env:RUNNER_TEMP 'radare2'
         }
@@ -158,8 +169,10 @@ runs:
     - name: Export prefix
       id: prefix
       shell: bash
+      env:
+        R2_PREFIX: ${{ inputs.prefix }}
       run: |
-        PREFIX="${{ inputs.prefix }}"
+        PREFIX="$R2_PREFIX"
         if [ "$RUNNER_OS" = "Windows" ] && [ "$PREFIX" = "/usr" ]; then
           PREFIX="$RUNNER_TEMP/radare2"
         fi
