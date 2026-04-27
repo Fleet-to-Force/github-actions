@@ -9,7 +9,7 @@ inputs:
     description: 'Path to the AssemblyUnit fold-in root to guard.'
     required: true
   require-fold-density:
-    description: 'Require every fold to declare surface removal, redundancy collapse, capability preservation, compounding, and blockers.'
+    description: 'Require every fold plus its normalization to declare surface removal, redundancy collapse, capability preservation, compounding, and blockers.'
     required: false
     default: 'true'
   require-normalization:
@@ -93,18 +93,6 @@ runs:
           done < <(find "$ROOT" -type f \( -name '*source-intake*resolution*.yamlld' -o -name '*source-intake*computed*.yamlld' \) | sort)
         fi
 
-        if [ "$REQUIRE_FOLD_DENSITY" = "true" ] && [ -d "$ROOT/folds" ]; then
-          echo 'Rule: every fold declares density fields.'
-          while IFS= read -r file; do
-            for field in surface_area_removed redundancy_collapsed boundary_removed_or_internalized capability_preserved capacity_compounded zero_loss_preservation_claim zero_copy_compounding_claim promotion_blockers; do
-              if ! grep -q "$field" "$file"; then
-                echo "::error file=$file::Fold missing required density field: $field"
-                FAIL=1
-              fi
-            done
-          done < <(find "$ROOT/folds" -type f -name '*.fold.yamlld' | sort)
-        fi
-
         if [ "$REQUIRE_NORMALIZATION" = "true" ] && [ -d "$ROOT/folds" ]; then
           echo 'Rule: every fold has normalization.'
           while IFS= read -r file; do
@@ -114,6 +102,31 @@ runs:
               echo "::error file=$file::Missing normalization file: $norm"
               FAIL=1
             fi
+          done < <(find "$ROOT/folds" -type f -name '*.fold.yamlld' | sort)
+        fi
+
+        if [ "$REQUIRE_FOLD_DENSITY" = "true" ] && [ -d "$ROOT/folds" ]; then
+          echo 'Rule: every fold plus normalization declares density fields.'
+          while IFS= read -r file; do
+            base="$(basename "$file" .fold.yamlld)"
+            norm="$ROOT/normalization/${base}.normalization.yamlld"
+            combined="$(mktemp)"
+            cat "$file" > "$combined"
+            if [ -f "$norm" ]; then
+              printf '\n' >> "$combined"
+              cat "$norm" >> "$combined"
+            fi
+            for field in surface_area_removed redundancy_collapsed boundary_removed_or_internalized capability_preserved capacity_compounded zero_loss_preservation_claim zero_copy_compounding_claim; do
+              if ! grep -q "$field" "$combined"; then
+                echo "::error file=$file::Fold plus normalization missing required density field: $field"
+                FAIL=1
+              fi
+            done
+            if ! grep -Eq 'promotion_blockers|promotion_blocked_until|normalization_blockers_remaining' "$combined"; then
+              echo "::error file=$file::Fold plus normalization missing promotion/blocker declaration."
+              FAIL=1
+            fi
+            rm -f "$combined"
           done < <(find "$ROOT/folds" -type f -name '*.fold.yamlld' | sort)
         fi
 
