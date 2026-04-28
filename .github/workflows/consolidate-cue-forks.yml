@@ -7,6 +7,11 @@ on:
         description: "Optional branch name to commit manifests into this repo"
         required: false
         default: ""
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/consolidate-cue-forks.yml
 
 permissions:
   contents: write
