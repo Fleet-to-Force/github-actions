@@ -1,14 +1,10 @@
-name: Consolidate CUE forks
+name: Consolidate CUE + Nickel stack
 
 on:
   workflow_dispatch:
     inputs:
-      include_nickel:
-        description: "Also checkout Fleet-to-Force/nickel"
-        required: false
-        default: "false"
       target_branch:
-        description: "Optional branch name to commit manifest into this repo"
+        description: "Optional branch name to commit manifests into this repo"
         required: false
         default: ""
 
@@ -25,118 +21,126 @@ jobs:
 
       - name: Prepare workspace
         run: |
-          mkdir -p consolidated/cue
+          mkdir -p consolidated/stack/cue
+          mkdir -p consolidated/stack/nickel
           mkdir -p consolidated/meta
+
+      - name: Checkout nickel
+        uses: actions/checkout@v4
+        with:
+          repository: Fleet-to-Force/nickel
+          path: consolidated/stack/nickel/nickel
 
       - name: Checkout cue
         uses: actions/checkout@v4
         with:
           repository: Fleet-to-Force/cue
-          path: consolidated/cue/cue
+          path: consolidated/stack/cue/cue
 
       - name: Checkout cuelang.org
         uses: actions/checkout@v4
         with:
           repository: Fleet-to-Force/cuelang.org
-          path: consolidated/cue/cuelang.org
+          path: consolidated/stack/cue/cuelang.org
 
       - name: Checkout setup-cue
         uses: actions/checkout@v4
         with:
           repository: Fleet-to-Force/setup-cue
-          path: consolidated/cue/setup-cue
+          path: consolidated/stack/cue/setup-cue
 
       - name: Checkout contrib-tools
         uses: actions/checkout@v4
         with:
           repository: Fleet-to-Force/contrib-tools
-          path: consolidated/cue/contrib-tools
+          path: consolidated/stack/cue/contrib-tools
 
       - name: Checkout libcue
         uses: actions/checkout@v4
         with:
           repository: Fleet-to-Force/libcue
-          path: consolidated/cue/libcue
+          path: consolidated/stack/cue/libcue
 
       - name: Checkout cue-py
         uses: actions/checkout@v4
         with:
           repository: Fleet-to-Force/cue-py
-          path: consolidated/cue/cue-py
+          path: consolidated/stack/cue/cue-py
 
       - name: Checkout proposal
         uses: actions/checkout@v4
         with:
           repository: Fleet-to-Force/proposal
-          path: consolidated/cue/proposal
+          path: consolidated/stack/cue/proposal
 
       - name: Checkout cue-api-java
         uses: actions/checkout@v4
         with:
           repository: Fleet-to-Force/cue-api-java
-          path: consolidated/cue/cue-api-java
+          path: consolidated/stack/cue/cue-api-java
 
-      - name: Optionally checkout nickel
-        if: ${{ inputs.include_nickel == 'true' }}
-        uses: actions/checkout@v4
-        with:
-          repository: Fleet-to-Force/nickel
-          path: consolidated/cue/nickel
-
-      - name: Write manifest
+      - name: Write coupled manifest
         shell: bash
         run: |
           cat > consolidated/meta/manifest.json <<'JSON'
           {
-            "owned_cue_forks_visible_to_app": [
-              "Fleet-to-Force/cue",
-              "Fleet-to-Force/cuelang.org",
-              "Fleet-to-Force/setup-cue",
-              "Fleet-to-Force/contrib-tools",
-              "Fleet-to-Force/libcue",
-              "Fleet-to-Force/cue-py",
-              "Fleet-to-Force/proposal",
-              "Fleet-to-Force/cue-api-java"
-            ],
-            "optional": [
-              "Fleet-to-Force/nickel"
-            ]
+            "coupled_stack": {
+              "nickel": [
+                "Fleet-to-Force/nickel"
+              ],
+              "cue": [
+                "Fleet-to-Force/cue",
+                "Fleet-to-Force/cuelang.org",
+                "Fleet-to-Force/setup-cue",
+                "Fleet-to-Force/contrib-tools",
+                "Fleet-to-Force/libcue",
+                "Fleet-to-Force/cue-py",
+                "Fleet-to-Force/proposal",
+                "Fleet-to-Force/cue-api-java"
+              ]
+            },
+            "doctrine": {
+              "nickel_is_optional": false,
+              "consolidation_scope": "single coupled workflow"
+            }
           }
           JSON
 
           python - <<'PY'
           import json, subprocess, pathlib
-          root = pathlib.Path('consolidated/cue')
+          root = pathlib.Path('consolidated/stack')
           rows = []
-          for repo in sorted(p for p in root.iterdir() if p.is_dir()):
-              def git(*args):
-                  return subprocess.check_output(['git', '-C', str(repo), *args], text=True).strip()
-              rows.append({
-                  'repo': f'Fleet-to-Force/{repo.name}',
-                  'branch': git('rev-parse', '--abbrev-ref', 'HEAD'),
-                  'commit': git('rev-parse', 'HEAD'),
-              })
+          for family in sorted(p for p in root.iterdir() if p.is_dir()):
+              for repo in sorted(p for p in family.iterdir() if p.is_dir()):
+                  def git(*args):
+                      return subprocess.check_output(['git', '-C', str(repo), *args], text=True).strip()
+                  rows.append({
+                      'family': family.name,
+                      'repo': f'Fleet-to-Force/{repo.name}',
+                      'branch': git('rev-parse', '--abbrev-ref', 'HEAD'),
+                      'commit': git('rev-parse', 'HEAD'),
+                  })
           pathlib.Path('consolidated/meta/repos.json').write_text(json.dumps(rows, indent=2) + '\n')
           pathlib.Path('consolidated/meta/repos.tsv').write_text(
-              'repo\tbranch\tcommit\n' + ''.join(f"{r['repo']}\t{r['branch']}\t{r['commit']}\n" for r in rows)
+              'family\trepo\tbranch\tcommit\n' + ''.join(f"{r['family']}\t{r['repo']}\t{r['branch']}\t{r['commit']}\n" for r in rows)
           )
           PY
 
       - name: Archive consolidated workspace
         run: |
-          tar -czf cue-forks-consolidated.tgz consolidated
+          tar -czf cue-nickel-stack-consolidated.tgz consolidated
 
       - name: Upload consolidated artifact
         uses: actions/upload-artifact@v4
         with:
-          name: cue-forks-consolidated
+          name: cue-nickel-stack-consolidated
           path: |
-            cue-forks-consolidated.tgz
+            cue-nickel-stack-consolidated.tgz
             consolidated/meta/manifest.json
             consolidated/meta/repos.json
             consolidated/meta/repos.tsv
 
-      - name: Optionally commit manifest to branch
+      - name: Optionally commit manifests to branch
         if: ${{ inputs.target_branch != '' }}
         shell: bash
         run: |
@@ -144,9 +148,9 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git checkout -B "${{ inputs.target_branch }}"
           mkdir -p manifests
-          cp consolidated/meta/manifest.json manifests/cue-forks-manifest.json
-          cp consolidated/meta/repos.json manifests/cue-forks-repos.json
-          cp consolidated/meta/repos.tsv manifests/cue-forks-repos.tsv
+          cp consolidated/meta/manifest.json manifests/cue-nickel-stack-manifest.json
+          cp consolidated/meta/repos.json manifests/cue-nickel-stack-repos.json
+          cp consolidated/meta/repos.tsv manifests/cue-nickel-stack-repos.tsv
           git add manifests/
-          git commit -m "Update consolidated CUE forks manifest" || exit 0
+          git commit -m "Update consolidated CUE + Nickel stack manifest" || exit 0
           git push --force origin "${{ inputs.target_branch }}"
