@@ -1,0 +1,154 @@
+name: 'AssemblyUnit Zero-Trust Guard'
+description: 'Enforce H_Global-Factory AssemblyUnit fold-in invariants without hand-authored derived authority.'
+branding:
+  icon: 'shield'
+  color: 'purple'
+
+inputs:
+  assembly-root:
+    description: 'Path to the AssemblyUnit fold-in root to guard.'
+    required: true
+  require-fold-density:
+    description: 'Require every fold plus its normalization to declare surface removal, redundancy collapse, capability preservation, compounding, and blockers.'
+    required: false
+    default: 'true'
+  require-normalization:
+    description: 'Require every *.fold.yamlld file to have a matching normalization file.'
+    required: false
+    default: 'true'
+  forbid-derived-artifacts:
+    description: 'Forbid hand-authored canonical *.cue, *.ncl, and *.jsonld under the guarded root.'
+    required: false
+    default: 'true'
+  forbid-manual-source-intake:
+    description: 'Forbid source-intake resolution files that lack computed provenance markers.'
+    required: false
+    default: 'true'
+  forbid-governance-conflation:
+    description: 'Forbid Go/CUE and Rust/Nickel conflation language.'
+    required: false
+    default: 'true'
+  forbid-premature-promotion:
+    description: 'Forbid build/self-witness/external-witness/promotion claims before computed gates exist.'
+    required: false
+    default: 'true'
+  allowed-generated-marker:
+    description: 'Regex marker proving a derived or source-intake file is generated/computed.'
+    required: false
+    default: 'computed_from:|computation_method:|generated_by:'
+
+outputs:
+  guarded-root:
+    description: 'The guarded AssemblyUnit root.'
+    value: ${{ inputs.assembly-root }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Guard AssemblyUnit fold-in invariants
+      shell: bash
+      env:
+        ASSEMBLY_ROOT: ${{ inputs.assembly-root }}
+        REQUIRE_FOLD_DENSITY: ${{ inputs.require-fold-density }}
+        REQUIRE_NORMALIZATION: ${{ inputs.require-normalization }}
+        FORBID_DERIVED_ARTIFACTS: ${{ inputs.forbid-derived-artifacts }}
+        FORBID_MANUAL_SOURCE_INTAKE: ${{ inputs.forbid-manual-source-intake }}
+        FORBID_GOVERNANCE_CONFLATION: ${{ inputs.forbid-governance-conflation }}
+        FORBID_PREMATURE_PROMOTION: ${{ inputs.forbid-premature-promotion }}
+        ALLOWED_GENERATED_MARKER: ${{ inputs.allowed-generated-marker }}
+      run: |
+        set -euo pipefail
+
+        ROOT="$ASSEMBLY_ROOT"
+        FAIL=0
+
+        echo "AssemblyUnit zero-trust guard: $ROOT"
+
+        if [ ! -d "$ROOT" ]; then
+          echo "::error::Assembly root does not exist: $ROOT"
+          exit 1
+        fi
+
+        if [ "$FORBID_DERIVED_ARTIFACTS" = "true" ]; then
+          echo 'Rule: no hand-authored derived artifacts.'
+          while IFS= read -r file; do
+            case "$file" in
+              *.cue|*.ncl|*.jsonld)
+                if ! grep -Eq "$ALLOWED_GENERATED_MARKER" "$file"; then
+                  echo "::error file=$file::Derived artifact lacks computed/generated provenance. CUE, Nickel, and JSON-LD must be generated."
+                  FAIL=1
+                fi
+                ;;
+            esac
+          done < <(find "$ROOT" -type f | sort)
+        fi
+
+        if [ "$FORBID_MANUAL_SOURCE_INTAKE" = "true" ]; then
+          echo 'Rule: no manual source-intake results.'
+          while IFS= read -r file; do
+            if ! grep -Eq "$ALLOWED_GENERATED_MARKER" "$file"; then
+              echo "::error file=$file::Source-intake resolution lacks computed provenance markers."
+              FAIL=1
+            fi
+          done < <(find "$ROOT" -type f \( -name '*source-intake*resolution*.yamlld' -o -name '*source-intake*computed*.yamlld' \) | sort)
+        fi
+
+        if [ "$REQUIRE_NORMALIZATION" = "true" ] && [ -d "$ROOT/folds" ]; then
+          echo 'Rule: every fold has normalization.'
+          while IFS= read -r file; do
+            base="$(basename "$file" .fold.yamlld)"
+            norm="$ROOT/normalization/${base}.normalization.yamlld"
+            if [ ! -f "$norm" ]; then
+              echo "::error file=$file::Missing normalization file: $norm"
+              FAIL=1
+            fi
+          done < <(find "$ROOT/folds" -type f -name '*.fold.yamlld' | sort)
+        fi
+
+        if [ "$REQUIRE_FOLD_DENSITY" = "true" ] && [ -d "$ROOT/folds" ]; then
+          echo 'Rule: every fold plus normalization declares density fields.'
+          while IFS= read -r file; do
+            base="$(basename "$file" .fold.yamlld)"
+            norm="$ROOT/normalization/${base}.normalization.yamlld"
+            combined="$(mktemp)"
+            cat "$file" > "$combined"
+            if [ -f "$norm" ]; then
+              printf '\n' >> "$combined"
+              cat "$norm" >> "$combined"
+            fi
+            for field in surface_area_removed redundancy_collapsed boundary_removed_or_internalized capability_preserved capacity_compounded zero_loss_preservation_claim zero_copy_compounding_claim; do
+              if ! grep -q "$field" "$combined"; then
+                echo "::error file=$file::Fold plus normalization missing required density field: $field"
+                FAIL=1
+              fi
+            done
+            if ! grep -Eq 'promotion_blockers|promotion_blocked_until|normalization_blockers_remaining' "$combined"; then
+              echo "::error file=$file::Fold plus normalization missing promotion/blocker declaration."
+              FAIL=1
+            fi
+            rm -f "$combined"
+          done < <(find "$ROOT/folds" -type f -name '*.fold.yamlld' | sort)
+        fi
+
+        if [ "$FORBID_GOVERNANCE_CONFLATION" = "true" ]; then
+          echo 'Rule: no governance conflation.'
+          if grep -RInE 'Go/CUE|Rust/Nickel|go_cue|rust_nickel' "$ROOT"; then
+            echo '::error::Found conflated governance phrasing. Use dm:go for CUE and dm:rust for Nickel.'
+            FAIL=1
+          fi
+        fi
+
+        if [ "$FORBID_PREMATURE_PROMOTION" = "true" ]; then
+          echo 'Rule: no premature executable/promotion claims.'
+          if grep -RInE 'build_allowed: true|self_witness_allowed: true|external_witness_allowed: true|promotion_status: "promoted"|promotion_state: "promoted"' "$ROOT"; then
+            echo '::error::Found premature build/self-witness/external-witness/promotion claim.'
+            FAIL=1
+          fi
+        fi
+
+        if [ "$FAIL" -ne 0 ]; then
+          echo 'AssemblyUnit zero-trust guard failed.'
+          exit 1
+        fi
+
+        echo 'AssemblyUnit zero-trust guard passed.'
