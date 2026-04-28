@@ -64,6 +64,18 @@ jobs:
           repository: Fleet-to-Force/cue-py
           path: consolidated/cue/cue-py
 
+      - name: Checkout proposal
+        uses: actions/checkout@v4
+        with:
+          repository: Fleet-to-Force/proposal
+          path: consolidated/cue/proposal
+
+      - name: Checkout cue-api-java
+        uses: actions/checkout@v4
+        with:
+          repository: Fleet-to-Force/cue-api-java
+          path: consolidated/cue/cue-api-java
+
       - name: Optionally checkout nickel
         if: ${{ inputs.include_nickel == 'true' }}
         uses: actions/checkout@v4
@@ -82,9 +94,7 @@ jobs:
               "Fleet-to-Force/setup-cue",
               "Fleet-to-Force/contrib-tools",
               "Fleet-to-Force/libcue",
-              "Fleet-to-Force/cue-py"
-            ],
-            "not_visible_in_this_session": [
+              "Fleet-to-Force/cue-py",
               "Fleet-to-Force/proposal",
               "Fleet-to-Force/cue-api-java"
             ],
@@ -95,7 +105,7 @@ jobs:
           JSON
 
           python - <<'PY'
-          import json, os, subprocess, pathlib
+          import json, subprocess, pathlib
           root = pathlib.Path('consolidated/cue')
           rows = []
           for repo in sorted(p for p in root.iterdir() if p.is_dir()):
