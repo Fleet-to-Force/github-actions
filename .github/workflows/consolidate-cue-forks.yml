@@ -1,4 +1,4 @@
-name: Consolidate CUE + Nickel stack
+name: Consolidate coupled stack
 
 on:
   workflow_dispatch:
@@ -21,124 +21,327 @@ jobs:
 
       - name: Prepare workspace
         run: |
-          mkdir -p consolidated/stack/cue
-          mkdir -p consolidated/stack/nickel
+          mkdir -p consolidated/stack/engines
+          mkdir -p consolidated/stack/dms
+          mkdir -p consolidated/stack/ffi
+          mkdir -p consolidated/stack/governance
+          mkdir -p consolidated/stack/docs
+          mkdir -p consolidated/stack/actions
+          mkdir -p consolidated/stack/tools
           mkdir -p consolidated/meta
+          mkdir -p consolidated/validation
 
-      - name: Checkout nickel
+      - name: Checkout nickel engine
         uses: actions/checkout@v4
         with:
           repository: Fleet-to-Force/nickel
-          path: consolidated/stack/nickel/nickel
+          path: consolidated/stack/engines/nickel
 
-      - name: Checkout cue
+      - name: Checkout cue engine
         uses: actions/checkout@v4
         with:
           repository: Fleet-to-Force/cue
-          path: consolidated/stack/cue/cue
+          path: consolidated/stack/engines/cue
 
-      - name: Checkout cuelang.org
+      - name: Checkout CUE docs/spec surface
         uses: actions/checkout@v4
         with:
           repository: Fleet-to-Force/cuelang.org
-          path: consolidated/stack/cue/cuelang.org
+          path: consolidated/stack/docs/cuelang.org
 
-      - name: Checkout setup-cue
+      - name: Checkout setup-cue action
         uses: actions/checkout@v4
         with:
           repository: Fleet-to-Force/setup-cue
-          path: consolidated/stack/cue/setup-cue
+          path: consolidated/stack/actions/setup-cue
 
-      - name: Checkout contrib-tools
+      - name: Checkout setup-bun action
         uses: actions/checkout@v4
         with:
-          repository: Fleet-to-Force/contrib-tools
-          path: consolidated/stack/cue/contrib-tools
+          repository: Fleet-to-Force/setup-bun
+          path: consolidated/stack/actions/setup-bun
 
-      - name: Checkout libcue
-        uses: actions/checkout@v4
-        with:
-          repository: Fleet-to-Force/libcue
-          path: consolidated/stack/cue/libcue
-
-      - name: Checkout cue-py
-        uses: actions/checkout@v4
-        with:
-          repository: Fleet-to-Force/cue-py
-          path: consolidated/stack/cue/cue-py
-
-      - name: Checkout proposal
+      - name: Checkout proposal governance surface
         uses: actions/checkout@v4
         with:
           repository: Fleet-to-Force/proposal
-          path: consolidated/stack/cue/proposal
+          path: consolidated/stack/governance/proposal
 
-      - name: Checkout cue-api-java
+      - name: Checkout libcue FFI surface
+        uses: actions/checkout@v4
+        with:
+          repository: Fleet-to-Force/libcue
+          path: consolidated/stack/ffi/libcue
+
+      - name: Checkout contrib tools
+        uses: actions/checkout@v4
+        with:
+          repository: Fleet-to-Force/contrib-tools
+          path: consolidated/stack/tools/contrib-tools
+
+      - name: Checkout uv DM seed
+        uses: actions/checkout@v4
+        with:
+          repository: Fleet-to-Force/cue-py
+          path: consolidated/stack/dms/uv/cue-py
+
+      - name: Checkout bun DM substrate
+        uses: actions/checkout@v4
+        with:
+          repository: Fleet-to-Force/bun
+          path: consolidated/stack/dms/bun/bun
+
+      - name: Checkout JVM annex DM
         uses: actions/checkout@v4
         with:
           repository: Fleet-to-Force/cue-api-java
-          path: consolidated/stack/cue/cue-api-java
+          path: consolidated/stack/dms/jvm/cue-api-java
 
-      - name: Write coupled manifest
+      - name: Build scoped manifest and validation outputs
         shell: bash
         run: |
-          cat > consolidated/meta/manifest.json <<'JSON'
-          {
-            "coupled_stack": {
-              "nickel": [
-                "Fleet-to-Force/nickel"
-              ],
-              "cue": [
-                "Fleet-to-Force/cue",
-                "Fleet-to-Force/cuelang.org",
-                "Fleet-to-Force/setup-cue",
-                "Fleet-to-Force/contrib-tools",
-                "Fleet-to-Force/libcue",
-                "Fleet-to-Force/cue-py",
-                "Fleet-to-Force/proposal",
-                "Fleet-to-Force/cue-api-java"
-              ]
-            },
-            "doctrine": {
-              "nickel_is_optional": false,
-              "consolidation_scope": "single coupled workflow"
-            }
-          }
-          JSON
-
           python - <<'PY'
-          import json, subprocess, pathlib
+          import json, pathlib, subprocess, sys
+
           root = pathlib.Path('consolidated/stack')
+          meta = pathlib.Path('consolidated/meta')
+          validation = pathlib.Path('consolidated/validation')
+
+          repo_roles = {
+              'engines/nickel': {
+                  'repo': 'Fleet-to-Force/nickel',
+                  'family': 'engine',
+                  'dm_lane': 'rust',
+                  'authority_role': 'semantic',
+                  'scope': 'semantic-authority-core',
+                  'layer_focus': ['L0', 'L2', 'L3'],
+                  'promotion': 'pillar',
+                  'required': True,
+                  'capabilities': ['semantic-kernel', 'authority-graph', 'runtime-intent', 'metadata-law', 'record-spine', 'rust-embedding', 'cli-control-plane']
+              },
+              'engines/cue': {
+                  'repo': 'Fleet-to-Force/cue',
+                  'family': 'engine',
+                  'dm_lane': 'go',
+                  'authority_role': 'structural',
+                  'scope': 'structural-consequence-core',
+                  'layer_focus': ['L1', 'L3'],
+                  'promotion': 'pillar',
+                  'required': True,
+                  'capabilities': ['structural-consequence', 'projection-engine', 'workflow-membrane', 'validation-engine', 'go-api']
+              },
+              'docs/cuelang.org': {
+                  'repo': 'Fleet-to-Force/cuelang.org',
+                  'family': 'docs',
+                  'dm_lane': 'go',
+                  'authority_role': 'docs',
+                  'scope': 'docs-spec-surface',
+                  'layer_focus': ['L1', 'L3'],
+                  'promotion': 'supporting-core',
+                  'required': True,
+                  'capabilities': ['spec', 'tutorials', 'api-guides', 'docs']
+              },
+              'actions/setup-cue': {
+                  'repo': 'Fleet-to-Force/setup-cue',
+                  'family': 'action',
+                  'dm_lane': 'go',
+                  'authority_role': 'ci',
+                  'scope': 'ci-install-cue',
+                  'layer_focus': ['L3'],
+                  'promotion': 'execution-critical',
+                  'required': True,
+                  'capabilities': ['version-pinning', 'runner-installation', 'workflow-reproducibility']
+              },
+              'actions/setup-bun': {
+                  'repo': 'Fleet-to-Force/setup-bun',
+                  'family': 'action',
+                  'dm_lane': 'bun',
+                  'authority_role': 'ci',
+                  'scope': 'ci-install-bun',
+                  'layer_focus': ['L3'],
+                  'promotion': 'execution-critical',
+                  'required': True,
+                  'capabilities': ['version-pinning', 'runner-installation', 'workflow-reproducibility', 'registry-configuration']
+              },
+              'governance/proposal': {
+                  'repo': 'Fleet-to-Force/proposal',
+                  'family': 'governance',
+                  'dm_lane': 'process',
+                  'authority_role': 'governance',
+                  'scope': 'change-control-doctrine',
+                  'layer_focus': ['L0', 'L3'],
+                  'promotion': 'governance-critical',
+                  'required': True,
+                  'capabilities': ['design-patterns', 'change-control', 'proposal-discipline']
+              },
+              'ffi/libcue': {
+                  'repo': 'Fleet-to-Force/libcue',
+                  'family': 'ffi',
+                  'dm_lane': 'c',
+                  'authority_role': 'ffi',
+                  'scope': 'c-ffi-membrane',
+                  'layer_focus': ['L2', 'L3'],
+                  'promotion': 'r-and-d-critical',
+                  'required': True,
+                  'capabilities': ['c-api', 'foreign-runtime-membrane', 'ffi']
+              },
+              'tools/contrib-tools': {
+                  'repo': 'Fleet-to-Force/contrib-tools',
+                  'family': 'tools',
+                  'dm_lane': 'ops',
+                  'authority_role': 'ops',
+                  'scope': 'upstream-review-ops',
+                  'layer_focus': ['L3'],
+                  'promotion': 'strategic-annex',
+                  'required': False,
+                  'capabilities': ['maintainer-tools', 'mcp-server', 'assistant-ops', 'review-ops']
+              },
+              'dms/uv/cue-py': {
+                  'repo': 'Fleet-to-Force/cue-py',
+                  'family': 'dm',
+                  'dm_lane': 'uv',
+                  'authority_role': 'foreign-runtime',
+                  'scope': 'python-foreign-runtime-dm-seed',
+                  'layer_focus': ['L2', 'L3'],
+                  'promotion': 'required-dm-seed',
+                  'required': True,
+                  'capabilities': ['python-binding', 'uv-lane-seed', 'foreign-runtime-participation']
+              },
+              'dms/bun/bun': {
+                  'repo': 'Fleet-to-Force/bun',
+                  'family': 'dm',
+                  'dm_lane': 'bun',
+                  'authority_role': 'foreign-runtime',
+                  'scope': 'bun-full-stack-dm-substrate',
+                  'layer_focus': ['L2', 'L3'],
+                  'promotion': 'required-dm-seed',
+                  'required': True,
+                  'capabilities': ['runtime', 'package-manager', 'bundler', 'test-runner', 'server-apis', 'ffi', 'node-api', 'single-file-executables']
+              },
+              'dms/jvm/cue-api-java': {
+                  'repo': 'Fleet-to-Force/cue-api-java',
+                  'family': 'dm',
+                  'dm_lane': 'jvm',
+                  'authority_role': 'annex',
+                  'scope': 'java-foreign-runtime-annex',
+                  'layer_focus': ['L2', 'L3'],
+                  'promotion': 'annex',
+                  'required': False,
+                  'capabilities': ['java-binding', 'jvm-annex', 'foreign-runtime-annex']
+              }
+          }
+
+          doctrine = {
+              'single_workflow': True,
+              'nickel_is_optional': False,
+              'separate_needs_model_forbidden': True,
+              'monorepo_target': {
+                'goal': 'one repo preserving capability and capacity while trimming duplicated surface area',
+                'required_dm_lanes': ['rust', 'go', 'uv', 'bun'],
+                'annex_dm_lanes': ['jvm', 'c'],
+              },
+              'coupled_stack': {
+                  'semantic_authority': 'Fleet-to-Force/nickel',
+                  'structural_consequence': 'Fleet-to-Force/cue',
+                  'uv_lane_seed': 'Fleet-to-Force/cue-py',
+                  'bun_lane_seed': 'Fleet-to-Force/bun',
+                  'jvm_lane_annex': 'Fleet-to-Force/cue-api-java',
+                  'docs_surface': 'Fleet-to-Force/cuelang.org',
+                  'governance_surface': 'Fleet-to-Force/proposal',
+                  'ffi_surface': 'Fleet-to-Force/libcue',
+                  'cue_ci_surface': 'Fleet-to-Force/setup-cue',
+                  'bun_ci_surface': 'Fleet-to-Force/setup-bun'
+              }
+          }
+
           rows = []
-          for family in sorted(p for p in root.iterdir() if p.is_dir()):
-              for repo in sorted(p for p in family.iterdir() if p.is_dir()):
-                  def git(*args):
-                      return subprocess.check_output(['git', '-C', str(repo), *args], text=True).strip()
-                  rows.append({
-                      'family': family.name,
-                      'repo': f'Fleet-to-Force/{repo.name}',
-                      'branch': git('rev-parse', '--abbrev-ref', 'HEAD'),
-                      'commit': git('rev-parse', 'HEAD'),
-                  })
-          pathlib.Path('consolidated/meta/repos.json').write_text(json.dumps(rows, indent=2) + '\n')
-          pathlib.Path('consolidated/meta/repos.tsv').write_text(
-              'family\trepo\tbranch\tcommit\n' + ''.join(f"{r['family']}\t{r['repo']}\t{r['branch']}\t{r['commit']}\n" for r in rows)
+          missing_required = []
+
+          def git(repo_path, *args):
+              return subprocess.check_output(['git', '-C', str(repo_path), *args], text=True).strip()
+
+          for rel_path, role in repo_roles.items():
+              repo_path = root / rel_path
+              if not repo_path.exists():
+                  if role['required']:
+                      missing_required.append(rel_path)
+                  continue
+              rows.append({
+                  'path': rel_path,
+                  'repo': role['repo'],
+                  'family': role['family'],
+                  'dm_lane': role['dm_lane'],
+                  'authority_role': role['authority_role'],
+                  'scope': role['scope'],
+                  'layer_focus': role['layer_focus'],
+                  'promotion': role['promotion'],
+                  'required': role['required'],
+                  'branch': git(repo_path, 'rev-parse', '--abbrev-ref', 'HEAD'),
+                  'commit': git(repo_path, 'rev-parse', 'HEAD'),
+                  'capabilities': role['capabilities'],
+              })
+
+          dm_lanes_present = sorted({r['dm_lane'] for r in rows if r['family'] in {'engine', 'dm'}})
+          checks = {
+              'semantic_authority_present': any(r['repo'] == 'Fleet-to-Force/nickel' for r in rows),
+              'structural_consequence_present': any(r['repo'] == 'Fleet-to-Force/cue' for r in rows),
+              'uv_lane_present': any(r['dm_lane'] == 'uv' for r in rows),
+              'bun_lane_present': any(r['dm_lane'] == 'bun' for r in rows),
+              'cue_ci_surface_present': any(r['repo'] == 'Fleet-to-Force/setup-cue' for r in rows),
+              'bun_ci_surface_present': any(r['repo'] == 'Fleet-to-Force/setup-bun' for r in rows),
+              'governance_surface_present': any(r['repo'] == 'Fleet-to-Force/proposal' for r in rows),
+              'ffi_surface_present': any(r['repo'] == 'Fleet-to-Force/libcue' for r in rows),
+              'docs_surface_present': any(r['repo'] == 'Fleet-to-Force/cuelang.org' for r in rows),
+          }
+          valid = (len(missing_required) == 0) and all(checks.values())
+
+          manifest = {
+              'doctrine': doctrine,
+              'repo_roles': rows,
+          }
+          validation_report = {
+              'valid': valid,
+              'missing_required_paths': missing_required,
+              'dm_lanes_present': dm_lanes_present,
+              'checks': checks,
+          }
+
+          meta.joinpath('manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
+          meta.joinpath('repos.json').write_text(json.dumps(rows, indent=2) + '\n')
+          meta.joinpath('repos.tsv').write_text(
+              'path\trepo\tfamily\tdm_lane\tauthority_role\tscope\trequired\tpromotion\tbranch\tcommit\n' +
+              ''.join(
+                  f"{r['path']}\t{r['repo']}\t{r['family']}\t{r['dm_lane']}\t{r['authority_role']}\t{r['scope']}\t{str(r['required']).lower()}\t{r['promotion']}\t{r['branch']}\t{r['commit']}\n"
+                  for r in rows
+              )
           )
+          validation.joinpath('report.json').write_text(json.dumps(validation_report, indent=2) + '\n')
+          validation.joinpath('report.txt').write_text(
+              'coupled_stack_valid=' + str(valid).lower() + '\n' +
+              'dm_lanes_present=' + ','.join(dm_lanes_present) + '\n' +
+              'missing_required_paths=' + ','.join(missing_required) + '\n'
+          )
+
+          if not valid:
+              print(json.dumps(validation_report, indent=2), file=sys.stderr)
+              sys.exit(1)
           PY
 
       - name: Archive consolidated workspace
         run: |
-          tar -czf cue-nickel-stack-consolidated.tgz consolidated
+          tar -czf coupled-stack-consolidated.tgz consolidated
 
       - name: Upload consolidated artifact
         uses: actions/upload-artifact@v4
         with:
-          name: cue-nickel-stack-consolidated
+          name: coupled-stack-consolidated
           path: |
-            cue-nickel-stack-consolidated.tgz
+            coupled-stack-consolidated.tgz
             consolidated/meta/manifest.json
             consolidated/meta/repos.json
             consolidated/meta/repos.tsv
+            consolidated/validation/report.json
+            consolidated/validation/report.txt
 
       - name: Optionally commit manifests to branch
         if: ${{ inputs.target_branch != '' }}
@@ -148,9 +351,11 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git checkout -B "${{ inputs.target_branch }}"
           mkdir -p manifests
-          cp consolidated/meta/manifest.json manifests/cue-nickel-stack-manifest.json
-          cp consolidated/meta/repos.json manifests/cue-nickel-stack-repos.json
-          cp consolidated/meta/repos.tsv manifests/cue-nickel-stack-repos.tsv
+          cp consolidated/meta/manifest.json manifests/coupled-stack-manifest.json
+          cp consolidated/meta/repos.json manifests/coupled-stack-repos.json
+          cp consolidated/meta/repos.tsv manifests/coupled-stack-repos.tsv
+          cp consolidated/validation/report.json manifests/coupled-stack-validation.json
+          cp consolidated/validation/report.txt manifests/coupled-stack-validation.txt
           git add manifests/
-          git commit -m "Update consolidated CUE + Nickel stack manifest" || exit 0
+          git commit -m "Finalize coupled stack manifest and validation" || exit 0
           git push --force origin "${{ inputs.target_branch }}"
